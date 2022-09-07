@@ -1,0 +1,127 @@
+* cndp-policy
+
+Test the feasibility of directing Kubernetes Pod traffic to userspace for policy enforcement.
+XDP programs are used to redirect packets to CNDP where a policy engine can apply its
+ruleset.
+
+The motivation for implementing policy in userspace is to avoid costly or challenging
+implementation in BPF, netfilter or kernel code. The hope is that new policy features can be
+delivered quickly in userspace and that a userspace implementation can handle changes in policy
+rules more efficiently.
+
+** Latency
+
+The first measure of interest is the end to end latency of redirecting Pod to Pod packets via
+CNDP.
+
+*** Test Environment
+
+The test environment uses network namespaces connected with veth pairs as simulated Pods and
+runs CNDP in Podman. For ease of traffic forwarding, 2 veths are added to the CNDP namespace so
+that it can be configured to forward traffic between them.
+
+The test environment uses
+https://github.com/xdp-project/xdp-tutorial/tree/master/packet03-redirecting
+and scripts to setup additional veth pairs in a CNDP container.
+
+*** Results
+
+Some rudimentary latency measurements were gathered using ping. The latency reported by ping
+varies significantly depending on the packet interval so several results were collected.
+
+This graph shows the full round-trip latency which includes forwarding by CNDP in *both*
+directions. The cost of a single direction redirect via CNDP is therefore half the latency shown
+in the table.
+
+#+plot: title:"Ping Latency" ind:1 deps:(2) type:2d with:histograms
+#+plot: set:"xlabel 'Interval (s)'" set:"yrange[0:]"
+#+plot: file:"ping-latency-by-time.png"
+| Interval (s) | Average Latency (ms) |
+|--------------+----------------------|
+|            1 |                0.137 |
+|          0.1 |                0.089 |
+|         0.01 |                0.078 |
+|        0.001 |                0.060 |
+|          0.0 |                0.069 |
+
+[[file:ping-latency-by-time.png]]
+
+#+begin_example
+# ping 10.12.2.2 -c 5 -i 1
+PING 10.12.2.2 (10.12.2.2) 56(84) bytes of data.
+64 bytes from 10.12.2.2: icmp_seq=1 ttl=64 time=0.159 ms
+64 bytes from 10.12.2.2: icmp_seq=2 ttl=64 time=0.140 ms
+64 bytes from 10.12.2.2: icmp_seq=3 ttl=64 time=0.122 ms
+64 bytes from 10.12.2.2: icmp_seq=4 ttl=64 time=0.131 ms
+64 bytes from 10.12.2.2: icmp_seq=5 ttl=64 time=0.135 ms
+
+--- 10.12.2.2 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4103ms
+rtt min/avg/max/mdev = 0.122/0.137/0.159/0.012 ms
+#+end_example
+
+#+begin_example
+# ping 10.12.2.2 -c 5 -i 0.1
+PING 10.12.2.2 (10.12.2.2) 56(84) bytes of data.
+64 bytes from 10.12.2.2: icmp_seq=1 ttl=64 time=0.178 ms
+64 bytes from 10.12.2.2: icmp_seq=2 ttl=64 time=0.068 ms
+64 bytes from 10.12.2.2: icmp_seq=3 ttl=64 time=0.070 ms
+64 bytes from 10.12.2.2: icmp_seq=4 ttl=64 time=0.072 ms
+64 bytes from 10.12.2.2: icmp_seq=5 ttl=64 time=0.061 ms
+
+--- 10.12.2.2 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 415ms
+rtt min/avg/max/mdev = 0.061/0.089/0.178/0.044 ms
+#+end_example
+
+#+begin_example
+# ping 10.12.2.2 -c 5 -i 0.01
+PING 10.12.2.2 (10.12.2.2) 56(84) bytes of data.
+64 bytes from 10.12.2.2: icmp_seq=1 ttl=64 time=0.148 ms
+64 bytes from 10.12.2.2: icmp_seq=2 ttl=64 time=0.067 ms
+64 bytes from 10.12.2.2: icmp_seq=3 ttl=64 time=0.057 ms
+64 bytes from 10.12.2.2: icmp_seq=4 ttl=64 time=0.060 ms
+64 bytes from 10.12.2.2: icmp_seq=5 ttl=64 time=0.061 ms
+
+--- 10.12.2.2 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 44ms
+rtt min/avg/max/mdev = 0.057/0.078/0.148/0.034 ms
+#+end_example
+
+#+begin_example
+# ping 10.12.2.2 -c 5 -i 0.001
+PING 10.12.2.2 (10.12.2.2) 56(84) bytes of data.
+64 bytes from 10.12.2.2: icmp_seq=1 ttl=64 time=0.139 ms
+64 bytes from 10.12.2.2: icmp_seq=2 ttl=64 time=0.054 ms
+64 bytes from 10.12.2.2: icmp_seq=3 ttl=64 time=0.035 ms
+64 bytes from 10.12.2.2: icmp_seq=4 ttl=64 time=0.037 ms
+64 bytes from 10.12.2.2: icmp_seq=5 ttl=64 time=0.038 ms
+
+--- 10.12.2.2 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4ms
+rtt min/avg/max/mdev = 0.035/0.060/0.139/0.039 ms
+#+end_example
+
+#+begin_example
+# ping 10.12.2.2 -c 5 -i 0.0
+PING 10.12.2.2 (10.12.2.2) 56(84) bytes of data.
+64 bytes from 10.12.2.2: icmp_seq=1 ttl=64 time=0.187 ms
+64 bytes from 10.12.2.2: icmp_seq=2 ttl=64 time=0.054 ms
+64 bytes from 10.12.2.2: icmp_seq=3 ttl=64 time=0.032 ms
+64 bytes from 10.12.2.2: icmp_seq=4 ttl=64 time=0.037 ms
+64 bytes from 10.12.2.2: icmp_seq=5 ttl=64 time=0.038 ms
+
+--- 10.12.2.2 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.032/0.069/0.187/0.059 ms, ipg/ewma 0.119/0.126 ms
+#+end_example
+
+For comparison, here are latency measurements from netperf ~tcp_rr~.
+
+#+begin_example
+# netperf -H 10.12.2.2 -t TCP_RR -- \
+    -o min_latency,mean_latency,max_latency,stddev_latency
+MIGRATED TCP REQUEST/RESPONSE TEST from 0.0.0.0 (0.0.0.0) port 0 AF_INET to 10.12.2.2 () port 0 AF_INET
+Minimum Latency Microseconds,Mean Latency Microseconds,Maximum Latency Microseconds,Stddev Latency Microseconds
+42,                          46.50,                    202,                         4.36
+#+end_example
