@@ -24,6 +24,8 @@ The test environment uses
 https://github.com/xdp-project/xdp-tutorial/tree/master/packet03-redirecting
 and scripts to setup additional veth pairs in a CNDP container.
 
+[[file:images/cndp-bidir-bench.png]]
+
 *** Results
 
 Some rudimentary latency measurements were gathered using ping. The latency reported by ping
@@ -35,7 +37,7 @@ in the table.
 
 #+plot: title:"Ping Latency" ind:1 deps:(2) type:2d with:histograms
 #+plot: set:"xlabel 'Interval (s)'" set:"yrange[0:]"
-#+plot: file:"ping-latency-by-time.png"
+#+plot: file:"images/ping-latency-by-interval.png"
 | Interval (s) | Average Latency (ms) |
 |--------------+----------------------|
 |            1 |                0.137 |
@@ -44,7 +46,7 @@ in the table.
 |        0.001 |                0.060 |
 |          0.0 |                0.069 |
 
-[[file:ping-latency-by-time.png]]
+[[file:images/ping-latency-by-interval.png]]
 
 #+begin_example
 # ping 10.12.2.2 -c 5 -i 1
