@@ -1,0 +1,118 @@
+* Setting up the test environment
+
+** Run CNDP
+
+#+begin_src sh :results output
+screen -S cndp -d -m podman run --name cndp -ti localhost/cndp-fedora-donaldh:latest
+#+end_src
+
+#+begin_src sh :results output :dir "/ssh:lab18:" :var NAME="romantic_jang"
+SANDBOX_KEY=$(podman inspect ${NAME} | jq -r '.[] | .NetworkSettings.SandboxKey')
+NS=$(basename ${SANDBOX_KEY})
+echo ${NS}
+#+end_src
+
+#+RESULTS:
+: netns-c07e53c6-f2e4-ef5d-21d7-d2503d44e185
+
+
+** Add additional veth interfaces
+
+*** Left
+
+#+header: :var CONTAINER_NS="netns-c07e53c6-f2e4-ef5d-21d7-d2503d44e185"
+#+header: :var DEV="cndp0"
+#+header: :var PEER="veth0"
+#+header: :var OUTSIDE_IP="10.12.41.1"
+#+header: :var INSIDE_IP="10.12.41.2"
+#+header: :var PREFIX_SIZE="24"
+#+begin_src sh :results output :dir "/ssh:lab18:"
+sudo ip link add ${DEV} type veth peer name ${PEER} netns "${CONTAINER_NS}"
+sudo ip link set dev ${DEV} up
+sudo ip addr add dev ${DEV} "${OUTSIDE_IP}/${PREFIX_SIZE}"
+sudo ip -n "${CONTAINER_NS}" link set dev ${PEER} up
+sudo ip -n "${CONTAINER_NS}" addr add dev ${PEER} "${INSIDE_IP}/${PREFIX_SIZE}"
+INSIDE_MAC=$(sudo ip netns exec "${CONTAINER_NS}" cat /sys/class/net/${PEER}/address)
+OUTSIDE_MAC=$(cat /sys/class/net/${DEV}/address)
+sudo ip neigh add "${INSIDE_IP}" lladdr "${INSIDE_MAC}" dev ${DEV} nud permanent
+sudo ip -n "${CONTAINER_NS}" neigh add "${OUTSIDE_IP}" lladdr "${OUTSIDE_MAC}" dev ${PEER} nud permanent
+sudo ip -n "${CONTAINER_NS}" route add "10.12/16" via ${OUTSIDE_IP} dev veth0
+ping -c 1 ${INSIDE_IP}
+#+end_src
+
+#+RESULTS:
+
+
+*** Right
+
+#+header: :var CONTAINER_NS="netns-c07e53c6-f2e4-ef5d-21d7-d2503d44e185"
+#+header: :var DEV="cndp1"
+#+header: :var PEER="veth1"
+#+header: :var OUTSIDE_IP="10.12.42.1"
+#+header: :var INSIDE_IP="10.12.42.2"
+#+header: :var PREFIX_SIZE="24"
+#+begin_src sh :results output :dir "/ssh:lab18:"
+sudo ip link add ${DEV} type veth peer name ${PEER} netns "${CONTAINER_NS}"
+sudo ip link set dev ${DEV} up
+sudo ip addr add dev ${DEV} "${OUTSIDE_IP}/${PREFIX_SIZE}"
+sudo ip -n "${CONTAINER_NS}" link set dev ${PEER} up
+sudo ip -n "${CONTAINER_NS}" addr add dev ${PEER} "${INSIDE_IP}/${PREFIX_SIZE}"
+INSIDE_MAC=$(sudo ip netns exec "${CONTAINER_NS}" cat /sys/class/net/${PEER}/address)
+OUTSIDE_MAC=$(cat /sys/class/net/${DEV}/address)
+sudo ip neigh add "${INSIDE_IP}" lladdr "${INSIDE_MAC}" dev ${DEV} nud permanent
+sudo ip -n "${CONTAINER_NS}" neigh add "${OUTSIDE_IP}" lladdr "${OUTSIDE_MAC}" dev ${PEER} nud permanent
+sudo ip -n "${CONTAINER_NS}" route add "10.12/16" via ${OUTSIDE_IP} dev veth0
+ping -c 1 ${INSIDE_IP}
+#+end_src
+
+
+** Add left and right namespaces
+
+#+begin_src sh :results output :dir "/ssh:lab18:xdp-tutorial"
+eval $(testenv/testenv.sh alias)
+
+t setup --name left --legacy-ip
+t setup --name right --legacy-ip
+#+end_src
+
+
+** Attach redirect progs, left - CNDP - right
+
+#+begin_src sh :results output :dir "/ssh:lab18:xdp-tutorial"
+eval $(testenv/testenv.sh alias)
+cd packet-solutions/
+
+t load -n left -- -F --progsec xdp_redirect_map --filename xdp_prog_kern_03.o
+t load -n right -- -F --progsec xdp_redirect_map --filename xdp_prog_kern_03.o
+
+sudo ./xdp_loader -d cndp0 -F --progsec xdp_redirect_map --filename xdp_prog_kern_03.o
+sudo ./xdp_loader -d cndp1 -F --progsec xdp_redirect_map --filename xdp_prog_kern_03.o
+
+t exec -n left -- ./xdp_loader -d veth0 -F --progsec xdp_pass --filename xdp_prog_kern_03.o
+t exec -n right -- ./xdp_loader -d veth0 -F --progsec xdp_pass --filename xdp_prog_kern_03.o
+#+end_src
+
+** Redirect left - CNDP - right
+
+#+header: :var CNDP_NS="netns-c07e53c6-f2e4-ef5d-21d7-d2503d44e185"
+#+begin_src sh :results output :dir "/ssh:lab18:xdp-tutorial"
+LEFT_MAC=$(sudo ip netns exec left cat /sys/class/net/veth0/address)
+RIGHT_MAC=$(sudo ip netns exec right cat /sys/class/net/veth0/address)
+CNDP_LEFT_MAC=$(sudo ip netns exec ${CNDP_NS} cat /sys/class/net/veth0/address)
+CNDP_RIGHT_MAC=$(sudo ip netns exec ${CNDP_NS} cat /sys/class/net/veth1/address)
+echo ${LEFT_MAC} ${CNDP_LEFT_MAC} ${CNDP_RIGHT_MAC} ${RIGHT_MAC}
+
+cd packet-solutions/
+
+# set forwarding chain
+sudo ./xdp_prog_user -d left -r cndp0 --src-mac ${LEFT_MAC} --dest-mac ${CNDP_LEFT_MAC}
+sudo ./xdp_prog_user -r left -d cndp0 --dest-mac ${LEFT_MAC} --src-mac ${CNDP_LEFT_MAC}
+
+sudo ./xdp_prog_user -d right -r cndp1 --src-mac ${RIGHT_MAC} --dest-mac ${CNDP_RIGHT_MAC}
+sudo ./xdp_prog_user -r right -d cndp1 --dest-mac ${RIGHT_MAC} --src-mac ${CNDP_RIGHT_MAC}
+
+sudo ip netns exec left ethtool -K veth0 tx off
+sudo ip netns exec right ethtool -K veth0 tx off
+sudo ip netns exec ${CNDP_NS} ethtool -K veth0 tx off
+sudo ip netns exec ${CNDP_NS} ethtool -K veth1 tx off
+#+end_src
