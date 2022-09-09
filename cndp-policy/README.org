@@ -40,6 +40,7 @@ shown for comparison.
 #+plot: ind:1 deps:(2 3 4) type:2d with:histograms
 #+plot: set:"xlabel 'Interval (s)'" set:"yrange[0:]"
 #+plot: file:"images/ping-latency-by-interval.png"
+#+caption: Round Trip Latency (ms)
 | Interval (s) | CNDP Average Latency | XDP Redirect Only | Kernel Routing |
 |--------------+----------------------+-------------------+----------------|
 |            1 |                0.137 |             0.042 |          0.045 |
@@ -58,6 +59,7 @@ userspace. See [[file:cndp-ping-results.org][ping results]] for details. The fol
 #+plot: ind:1 deps:(2 3 4) type:2d with:histograms
 #+plot: set:"yrange[0:]"
 #+plot: file:"images/ping-latency-first-by-interval.png"
+#+caption: First Packet Latency (ms)
 |              | CNDP Latency | XDP Redirect Only | Kernel Routing |
 |--------------+--------------+-------------------+----------------|
 | First Packet |        0.159 |             0.070 |          0.050 |
