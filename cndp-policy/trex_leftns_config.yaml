@@ -1,0 +1,5 @@
+- port_limit: 2
+  version: 2
+  interfaces: ["veth0", "dummy"]
+  port_info:
+    - default_gw: 10.12.1.1
