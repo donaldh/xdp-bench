@@ -1,0 +1,79 @@
+* veth-notes
+
+Notes on using XDP programs and AF_XDP on veth interfaces.
+
+** Summary
+
+Veth interfaces were traditionally ~skb~ only, receiving and sending them from and to the kernel
+network stack. For single node east-west traffic between containers, this means that the data
+path would be ~skb~ all the way, with various optimisations because a GSO / GRO sized (64k)
+~skb~ transits all the way:
+
+- Segmentation is avoided.
+- Checksumming is avoided.
+
+Veth interfaces inherited Generic XDP support where the kernel stack does the ~skb~ to
+~xdp_buff~ conversion before calling XDP hooks. This causes segmentation to happen.
+
+Since kernel 4.19 veth interfaces also have Native XDP support, where the driver is responsible
+for converting between ~skb~ and ~xdp_buff~ in different scnearios.
+
+- Convert ~skb~ received from the network stack to ~xdp_buff~ when an XDP program is present.
+- Convert ~xdp_buff~ received via XDP_REDIRECT to ~skb~ when forwarding to kernel network
+  stack.
+
+Native XDP support is useful for use cases where packets received by a NIC driver are redirected
+to a veth pair where an AF_XDP program is attached. This would be the scenario when running a
+CNDP application in a container, for external north-south traffic. Unfortuately this becomes
+more costly for east-west traffic that originates from another container on the same node.
+
+** Performance Measurements
+
+*** iperf3 routed between 2 namespaces
+
+#+begin_example
+# iperf3 -c 10.12.2.2 -t 5
+Connecting to host 10.12.2.2, port 5201
+[  5] local 10.12.1.2 port 42718 connected to 10.12.2.2 port 5201
+[ ID] Interval           Transfer     Bitrate         Retr  Cwnd
+[  5]   0.00-1.00   sec  2.28 GBytes  19.5 Gbits/sec    0    345 KBytes
+[  5]   1.00-2.00   sec  2.33 GBytes  20.0 Gbits/sec    0    407 KBytes
+[  5]   2.00-3.00   sec  2.18 GBytes  18.8 Gbits/sec    0    474 KBytes
+[  5]   3.00-4.00   sec  2.28 GBytes  19.5 Gbits/sec    0    474 KBytes
+[  5]   4.00-5.00   sec  2.20 GBytes  18.9 Gbits/sec    0    474 KBytes
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-5.00   sec  11.3 GBytes  19.3 Gbits/sec    0             sender
+[  5]   0.00-5.00   sec  11.3 GBytes  19.3 Gbits/sec                  receiver
+#+end_example
+
+*** iperf3 xdp_redirect between namespaces
+
+#+begin_example
+# iperf3 -c 10.12.2.2 -t 5
+Connecting to host 10.12.2.2, port 5201
+[  5] local 10.12.1.2 port 44550 connected to 10.12.2.2 port 5201
+[ ID] Interval           Transfer     Bitrate         Retr  Cwnd
+[  5]   0.00-1.00   sec   456 MBytes  3.82 Gbits/sec    0    482 KBytes
+[  5]   1.00-2.00   sec   508 MBytes  4.26 Gbits/sec    0    482 KBytes
+[  5]   2.00-3.00   sec   508 MBytes  4.26 Gbits/sec    0    482 KBytes
+[  5]   3.00-4.00   sec   506 MBytes  4.24 Gbits/sec    0    482 KBytes
+[  5]   4.00-5.00   sec   488 MBytes  4.10 Gbits/sec    0    482 KBytes
+- - - - - - - - - - - - - - - - - - - - - - - - -
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-5.00   sec  2.41 GBytes  4.13 Gbits/sec    0             sender
+[  5]   0.00-5.00   sec  2.41 GBytes  4.13 Gbits/sec                  receiver
+#+end_example
+
+** Quirks
+
+
+
+** Future Development
+
+
+
+** References
+
+[[https://legacy.netdevconf.info/0x13/session.html?talk-veth-xdp][Veth XDP at Netdev 0x13]]
+[[https://docs.kernel.org/networking/skbuff.html#checksumming-on-output-with-gso][Output Checksumming in Kernel Docs]]
