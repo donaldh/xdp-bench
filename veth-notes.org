@@ -23,9 +23,9 @@ for converting between ~skb~ and ~xdp_buff~ in different scnearios.
   stack.
 
 Native XDP support is useful for use cases where packets received by a NIC driver are redirected
-to a veth pair where an AF_XDP program is attached. This would be the scenario when running a
-CNDP application in a container, for external north-south traffic. Unfortuately this becomes
-more costly for east-west traffic that originates from another container on the same node.
+to a veth pair with an attached AF_XDP program. This would be the scenario when running a CNDP
+application in a container, for external north-south traffic. Unfortuately this becomes more
+costly for east-west traffic that originates from another container on the same node.
 
 ** Performance Measurements
 
@@ -65,9 +65,15 @@ Connecting to host 10.12.2.2, port 5201
 [  5]   0.00-5.00   sec  2.41 GBytes  4.13 Gbits/sec                  receiver
 #+end_example
 
+** Issues
+
+Large MTU support with xdp.frags seems to be broken.
+
 ** Quirks
 
+skb - xdp_buff - skb round-trip is lossy:
 
+- Offload info is lost
 
 ** Future Development
 
@@ -75,5 +81,5 @@ Connecting to host 10.12.2.2, port 5201
 
 ** References
 
-[[https://legacy.netdevconf.info/0x13/session.html?talk-veth-xdp][Veth XDP at Netdev 0x13]]
-[[https://docs.kernel.org/networking/skbuff.html#checksumming-on-output-with-gso][Output Checksumming in Kernel Docs]]
+- [[https://legacy.netdevconf.info/0x13/session.html?talk-veth-xdp][Veth XDP at Netdev 0x13]]
+- [[https://docs.kernel.org/networking/skbuff.html#checksumming-on-output-with-gso][Output Checksumming in Kernel Docs]]
