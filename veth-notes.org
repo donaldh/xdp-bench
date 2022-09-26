@@ -67,7 +67,9 @@ Connecting to host 10.12.2.2, port 5201
 
 ** Issues
 
-Large MTU support with xdp.frags seems to be broken.
+Multibuffer XDP is opt-in with the ~xdp.frags~ section. It ss currently disabled when using
+XDP_REDIRECT because it is not supported in all XDP capable drivers. XDP_REDIRECT is supported
+for CPUMAP redirects.
 
 ** Quirks
 
