@@ -73,9 +73,13 @@ for CPUMAP redirects.
 
 ** Quirks
 
-skb - xdp_buff - skb round-trip is lossy:
+SKB to xdp_buff to SKB round-trip is lossy:
 
 - Offload info is lost
+
+
+SKB to xdp_buff, CHECKSUM_PARTIAL information is lost. This seems to be the cause of packet
+checksum failures.
 
 ** Future Development
 
