@@ -83,6 +83,28 @@ checksum failures.
 
 ** Future Development
 
+*** From Jesper ...
+
+[Use-case/challenge: Modifying XDP-hints in XDP BPF-prog]
+
+If we have an XDP-prog loaded on peer veth device, then it can change
+different aspects (e.g. size) of the packet including the XDP-hints data
+area.
+
+For the SKB to xdp_buff case, that returns XDP_PASS, it causes extra
+work, see end of function veth_xdp_rcv_skb().   Like-wise, we need to
+update the SKB with updated info from xdp_hints_common. I guess, my
+patchset also need this for XDP-generic code path.
+
+There are multiple use-case for updating XDP-hints data area.
+Also the possibility to create a new XDP-hints layout, that acts as a
+communication channel to e.g. an AF_XDP CNDP consumer. E.g.
+precategorizing flows (via updating rx_hash) for easier de-multiplexing.
+E.g. pre-parsing of packet headers with L4 start offsets. etc.
+
+Once hardware start to innovate new XDP-hints (like pre-parsing of
+packet headers with L4 start offsets) then we also want veth and
+consumers like AF_XDP+CNDP to get access to this.
 
 
 ** References
